@@ -1,0 +1,6 @@
+{
+  "name": "Look",
+  "description": "Live widget social moments with AI companion and Web3 decentralized vault",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
