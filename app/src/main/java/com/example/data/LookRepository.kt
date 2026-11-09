@@ -1,8 +1,11 @@
 package com.example.data
 
 import com.example.model.AIMetadata
+import com.example.model.AudienceVisibility
 import com.example.model.BlockchainMetadata
 import com.example.model.LookMoment
+import com.example.model.LookThought
+import com.example.model.MediaType
 import com.example.model.MemoryChatMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +34,9 @@ object LookRepository {
         mintedAt = "Hôm nay, 08:30"
       ),
       reactionsCount = 14,
-      isLiked = true
+      isLiked = true,
+      audience = AudienceVisibility.CLOSE_FRIENDS,
+      taggedFriends = listOf("Minh Quân", "Bạn (Tôi)")
     ),
     LookMoment(
       id = "moment-2",
@@ -48,7 +53,9 @@ object LookRepository {
       ),
       blockchainMetadata = null,
       reactionsCount = 28,
-      isLiked = false
+      isLiked = false,
+      audience = AudienceVisibility.PUBLIC,
+      taggedFriends = listOf("Hà My")
     ),
     LookMoment(
       id = "moment-3",
@@ -69,7 +76,8 @@ object LookRepository {
         mintedAt = "Hôm qua, 19:45"
       ),
       reactionsCount = 42,
-      isLiked = true
+      isLiked = true,
+      audience = AudienceVisibility.CLOSE_FRIENDS
     )
   )
 
@@ -80,12 +88,47 @@ object LookRepository {
   private val _activeWidgetMoment = MutableStateFlow(sampleMoments.first())
   val activeWidgetMoment: StateFlow<LookMoment> = _activeWidgetMoment.asStateFlow()
 
+  // Streak & Activity System
+  private val _currentStreak = MutableStateFlow(7)
+  val currentStreak: StateFlow<Int> = _currentStreak.asStateFlow()
+
+  private val _maxStreak = MutableStateFlow(14)
+  val maxStreak: StateFlow<Int> = _maxStreak.asStateFlow()
+
+  private val _hasPostedToday = MutableStateFlow(false)
+  val hasPostedToday: StateFlow<Boolean> = _hasPostedToday.asStateFlow()
+
+  private val _freezeShieldCount = MutableStateFlow(1)
+  val freezeShieldCount: StateFlow<Int> = _freezeShieldCount.asStateFlow()
+
+  // Short Posts / Thoughts
+  private val _thoughts = MutableStateFlow(
+    listOf(
+      LookThought(
+        id = "th-1",
+        authorName = "Minh Quân",
+        authorAvatar = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+        text = "Vừa code xong feature Live Widget cho Look app, mượt cực kỳ!",
+        bgGradient = listOf("#8B5CF6", "#3B82F6"),
+        emoji = "💻",
+        timeAgo = "15 phút trước"
+      ),
+      LookThought(
+        id = "th-2",
+        authorName = "Hà My",
+        authorAvatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+        text = "Gió lạnh đầu mùa rồi, ai đi lượn phố ăn kem Tràng Tiền không?",
+        bgGradient = listOf("#EC4899", "#F43F5E"),
+        emoji = "🍦",
+        timeAgo = "45 phút trước"
+      )
+    )
+  )
+  val thoughts: StateFlow<List<LookThought>> = _thoughts.asStateFlow()
+
   // Web3 state
   private val _walletAddress = MutableStateFlow("0x71C84013627A529e0630CE6Ab4828E02f1dE4E89")
   val walletAddress: StateFlow<String> = _walletAddress.asStateFlow()
-
-  private val _isWalletConnected = MutableStateFlow(true)
-  val isWalletConnected: StateFlow<Boolean> = _isWalletConnected.asStateFlow()
 
   // Memory chat messages
   private val _chatMessages = MutableStateFlow(
@@ -93,13 +136,13 @@ object LookRepository {
       MemoryChatMessage(
         id = "1",
         isUser = false,
-        text = "Xin chào! Mình là Look AI Companion 🤖. Hôm nay bạn muốn tìm lại kỷ niệm nào với hội bạn thân?",
+        text = "Xin chào! Mình là Look AI Companion 🤖. Chuỗi Streak của bạn đang là 7 ngày liên tiếp 🔥!",
         timestamp = "09:00"
       ),
       MemoryChatMessage(
         id = "2",
         isUser = false,
-        text = "💡 Nhắc bạn: Tròn 1 năm trước, bạn và Minh Quân đã chụp bức ảnh hoàng hôn tại Hồ Tây. Bạn có muốn gửi một ảnh mới lên Widget của Quân để ôn lại kỷ niệm không?",
+        text = "💡 Nhắc bạn: Tròn 1 năm trước, bạn và Minh Quân đã chụp bức ảnh hoàng hôn tại Hồ Tây. Đăng 1 khoảnh khắc ngay hôm nay để duy trì Streak lên 8 ngày nhé!",
         timestamp = "09:01",
         relatedMomentImage = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=80"
       )
@@ -128,7 +171,10 @@ object LookRepository {
     caption: String,
     mood: String,
     tags: List<String>,
-    mintSbt: Boolean
+    mintSbt: Boolean,
+    mediaType: MediaType = MediaType.PHOTO,
+    audience: AudienceVisibility = AudienceVisibility.CLOSE_FRIENDS,
+    taggedFriends: List<String> = emptyList()
   ): LookMoment {
     val newId = "moment-${UUID.randomUUID()}"
     val blockchainData = if (mintSbt) {
@@ -154,13 +200,39 @@ object LookRepository {
       ),
       blockchainMetadata = blockchainData,
       reactionsCount = 1,
-      isLiked = true
+      isLiked = true,
+      mediaType = mediaType,
+      audience = audience,
+      taggedFriends = taggedFriends
     )
 
     val updatedList = listOf(newMoment) + _moments.value
     _moments.value = updatedList
     _activeWidgetMoment.value = newMoment
+
+    // Update streak logic
+    if (!_hasPostedToday.value) {
+      _hasPostedToday.value = true
+      _currentStreak.value = _currentStreak.value + 1
+      if (_currentStreak.value > _maxStreak.value) {
+        _maxStreak.value = _currentStreak.value
+      }
+    }
+
     return newMoment
+  }
+
+  fun addNewThought(text: String, emoji: String) {
+    val newThought = LookThought(
+      id = "th-${UUID.randomUUID()}",
+      authorName = "Bạn (Tôi)",
+      authorAvatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      text = text,
+      bgGradient = listOf("#FFC72C", "#FF8F00"),
+      emoji = emoji,
+      timeAgo = "Vừa xong"
+    )
+    _thoughts.value = listOf(newThought) + _thoughts.value
   }
 
   fun mintExistingMoment(momentId: String) {
@@ -191,16 +263,15 @@ object LookRepository {
     )
     _chatMessages.value = _chatMessages.value + userMsg
 
-    // Generate responsive AI response
     val aiResponseText = when {
+      userText.contains("streak", ignoreCase = true) || userText.contains("lửa", ignoreCase = true) ->
+        "Hiện tại bạn đã đạt chuỗi streak ${_currentStreak.value} ngày liên tiếp 🔥! Hãy đăng 1 khoảnh khắc trước 23:59 hôm nay để bảo vệ chuỗi ngày và nhận huy hiệu 'Người bạn bền bỉ' nhé!"
       userText.contains("kỷ niệm", ignoreCase = true) || userText.contains("hồ tây", ignoreCase = true) ->
         "Kỷ niệm Hồ Tây đó của bạn và Quân nhận được 28 lượt thả tim trên Widget đấy! Mình gợi ý bạn chụp ngay một ảnh selfie kèm caption: 'Hồ Tây vẫn thế, chỉ có tình bạn chúng mình là nhân đôi!' 🚀"
       userText.contains("nft", ignoreCase = true) || userText.contains("sbt", ignoreCase = true) || userText.contains("web3", ignoreCase = true) ->
-        "Bạn hiện có 2 khoảnh khắc đã được đúc thành Soulbound Token (SBT) vĩnh cửu trên Polygon. Chúng được mã hóa IPFS an toàn tuyệt đối và không thể bị sửa đổi."
-      userText.contains("caption", ignoreCase = true) ->
-        "Gợi ý caption hot trend hôm nay: 'Mỗi khoảnh khắc xuất hiện trên widget của cậu là một lời nhắc tớ luôn ở đây 💛'. Bạn thử dùng nhé!"
+        "Bạn hiện có 2 khoảnh khắc đã được đúc thành Soulbound Token (SBT) vĩnh cửu trên Polygon. Chúng được mã hóa IPFS an toàn tuyệt đối."
       else ->
-        "Look AI đã ghi nhận! Bạn có thể chọn bất kỳ ảnh nào để mình sinh caption thơ/hài hước hoặc chọn khoảnh khắc đẹp nhất để đúc thành kỷ vật Web3 nhé ✨."
+        "Look AI đã ghi nhận! Bạn có thể chọn ảnh để sinh caption thơ/hài hước hoặc chia sẻ suy nghĩ nhanh lên bảng tin bạn thân nhé ✨."
     }
 
     val aiMsg = MemoryChatMessage(

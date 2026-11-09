@@ -1,5 +1,16 @@
 package com.example.model
 
+enum class AudienceVisibility {
+  PUBLIC,
+  CLOSE_FRIENDS,
+  SPECIFIC
+}
+
+enum class MediaType {
+  PHOTO,
+  VIDEO
+}
+
 data class AIMetadata(
   val caption: String,
   val mood: String,
@@ -27,7 +38,20 @@ data class LookMoment(
   val aiMetadata: AIMetadata,
   val blockchainMetadata: BlockchainMetadata? = null,
   val reactionsCount: Int = 0,
-  val isLiked: Boolean = false
+  val isLiked: Boolean = false,
+  val mediaType: MediaType = MediaType.PHOTO,
+  val audience: AudienceVisibility = AudienceVisibility.CLOSE_FRIENDS,
+  val taggedFriends: List<String> = emptyList()
+)
+
+data class LookThought(
+  val id: String,
+  val authorName: String,
+  val authorAvatar: String,
+  val text: String,
+  val bgGradient: List<String>,
+  val emoji: String,
+  val timeAgo: String
 )
 
 data class MemoryChatMessage(

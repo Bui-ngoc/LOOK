@@ -178,7 +178,10 @@ fun LookAppMain() {
     ) {
       when (selectedTab) {
         0 -> CaptureScreen(onMomentSent = { selectedTab = 1 })
-        1 -> FeedScreen(onNavigateToCapture = { selectedTab = 0 })
+        1 -> FeedScreen(
+          onNavigateToCapture = { selectedTab = 0 },
+          onNavigateToChat = { selectedTab = 2 }
+        )
         2 -> AiCompanionScreen()
         3 -> Web3VaultScreen()
       }
