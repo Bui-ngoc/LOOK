@@ -1,7 +1,13 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,9 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
@@ -62,6 +69,7 @@ import com.example.data.LookRepository
 import com.example.ui.theme.LookBorder
 import com.example.ui.theme.LookDarkCard
 import com.example.ui.theme.LookDarkSurface
+import com.example.ui.theme.LookEmerald
 import com.example.ui.theme.LookGold
 import com.example.ui.theme.LookNeonCyan
 import com.example.ui.theme.LookPurple
@@ -69,31 +77,54 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 private val sampleCameraCaptures = listOf(
-  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&auto=format&fit=crop&q=80", // Nhóm bạn cười tươi
-  "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=800&auto=format&fit=crop&q=80", // Thành phố về đêm
-  "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&auto=format&fit=crop&q=80", // Buổi tiệc âm nhạc
-  "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800&auto=format&fit=crop&q=80"  // Bàn học & sách vở
+  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1514565131-fce0801e5785?w=800&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800&auto=format&fit=crop&q=80"
 )
 
 private val aiCaptionPresets = mapOf(
   "Hài hước" to listOf(
     "Nụ cười 10 phân vẹn 10 nhưng bài tập chưa làm xong cái nào 😂",
     "Có những khoảnh khắc chỉ cần nhìn mặt nhau là đã buồn cười rồi!",
-    "Bên ngoài thảnh thơi, bên trong gánh còng lưng deadline 🔥"
+    "Bên ngoài thảnh thơi, bên trong gánh còng lưng deadline 🔥",
+    "Ảnh chụp chất lượng cao, nhan sắc chất lượng đỉnh chóp 😎"
   ),
   "Thơ mộng" to listOf(
     "Mặt trời xuống núi nghỉ ngơi, gửi vào widget nụ cười của nhau ✨",
     "Tháng năm rực rỡ nhất là khi có các cậu cùng đồng hành 🌸",
-    "Gió thổi mang hương chiều hạ, gửi chút bình yên sang màn hình bạn."
+    "Gió thổi mang hương chiều hạ, gửi chút bình yên sang màn hình bạn.",
+    "Khoảnh khắc nhỏ bé nhưng đong đầy yêu thương 💛"
   ),
   "Hoài niệm" to listOf(
     "Sau này nhìn lại, chúng ta sẽ mỉm cười vì đã sống hết mình cho tuổi trẻ.",
     "Khoảnh khắc này sẽ được lưu giữ mãi mãi trong chiếc widget nhỏ.",
-    "Cảm ơn vì đã luôn là tri kỷ trong từng khung hình kỷ niệm."
+    "Cảm ơn vì đã luôn là tri kỷ trong từng khung hình kỷ niệm.",
+    "Bảo vật thời gian, gửi vào hôm nay để nhớ về mai sau 🕰️"
   )
 )
+
+private fun saveBitmapToCache(context: Context, bitmap: Bitmap): String {
+  val file = File(context.cacheDir, "look_captured_${System.currentTimeMillis()}.jpg")
+  FileOutputStream(file).use { out ->
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+  }
+  return file.absolutePath
+}
+
+private fun copyUriToCache(context: Context, uri: Uri): String {
+  val file = File(context.cacheDir, "look_picked_${System.currentTimeMillis()}.jpg")
+  context.contentResolver.openInputStream(uri)?.use { input ->
+    FileOutputStream(file).use { output ->
+      input.copyTo(output)
+    }
+  }
+  return file.absolutePath
+}
 
 @Composable
 fun CaptureScreen(
@@ -103,9 +134,12 @@ fun CaptureScreen(
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
 
-  var selectedImageIndex by remember { mutableIntStateOf(0) }
   var isFlashOn by remember { mutableStateOf(false) }
   var isFrontCamera by remember { mutableStateOf(false) }
+
+  // Current photo source: can be custom file path, picked uri, or preset URL
+  var currentPhotoPath by remember { mutableStateOf(sampleCameraCaptures[0]) }
+  var isFromDeviceCamera by remember { mutableStateOf(false) }
 
   var selectedMood by remember { mutableStateOf("Hài hước") }
   var captionText by remember { mutableStateOf("Nụ cười 10 phân vẹn 10 nhưng bài tập chưa làm xong cái nào 😂") }
@@ -113,27 +147,57 @@ fun CaptureScreen(
   var isGeneratingAi by remember { mutableStateOf(false) }
   var isSending by remember { mutableStateOf(false) }
 
-  val currentImage = sampleCameraCaptures[selectedImageIndex]
-
   fun triggerAiCaption(mood: String) {
     selectedMood = mood
     isGeneratingAi = true
     coroutineScope.launch {
-      delay(700) // Simulate Gemini Vision AI analysis
+      delay(600)
       val options = aiCaptionPresets[mood] ?: aiCaptionPresets["Hài hước"]!!
       captionText = options.random()
       isGeneratingAi = false
     }
   }
 
+  // 1. Hardware / System Camera Launcher (Opens camera app / emulator virtual camera)
+  val cameraLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.TakePicturePreview(),
+    onResult = { bitmap ->
+      if (bitmap != null) {
+        val savedPath = saveBitmapToCache(context, bitmap)
+        currentPhotoPath = savedPath
+        isFromDeviceCamera = true
+        Toast.makeText(context, "📸 Đã chụp ảnh thành công từ Camera máy!", Toast.LENGTH_SHORT).show()
+        triggerAiCaption(selectedMood)
+      }
+    }
+  )
+
+  // 2. Android Photo Picker Launcher (Pick any photo from device storage)
+  val photoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia(),
+    onResult = { uri ->
+      if (uri != null) {
+        try {
+          val savedPath = copyUriToCache(context, uri)
+          currentPhotoPath = savedPath
+          isFromDeviceCamera = true
+          Toast.makeText(context, "🖼️ Đã chọn ảnh từ thư viện thiết bị!", Toast.LENGTH_SHORT).show()
+          triggerAiCaption(selectedMood)
+        } catch (e: Exception) {
+          Toast.makeText(context, "Không thể tải ảnh: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+      }
+    }
+  )
+
   Column(
     modifier = modifier
       .fillMaxSize()
       .verticalScroll(rememberScrollState())
-      .padding(horizontal = 16.dp, vertical = 12.dp),
+      .padding(horizontal = 16.dp, vertical = 10.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    // Top Camera Controls Bar
+    // Top Controls Bar
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -166,7 +230,8 @@ fun CaptureScreen(
       IconButton(
         onClick = {
           isFrontCamera = !isFrontCamera
-          selectedImageIndex = (selectedImageIndex + 1) % sampleCameraCaptures.size
+          // Launch camera or toggle view
+          cameraLauncher.launch(null)
         },
         modifier = Modifier
           .clip(CircleShape)
@@ -180,7 +245,7 @@ fun CaptureScreen(
       }
     }
 
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     // Camera Viewfinder (Locket style squircle 1:1)
     Box(
@@ -196,19 +261,19 @@ fun CaptureScreen(
         )
     ) {
       AsyncImage(
-        model = currentImage,
+        model = currentPhotoPath,
         contentDescription = "Camera Viewfinder",
         contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize()
       )
 
-      // Live indicator
+      // Live tag / Camera Source tag
       Row(
         modifier = Modifier
           .align(Alignment.TopStart)
           .padding(14.dp)
           .clip(RoundedCornerShape(12.dp))
-          .background(Color.Black.copy(alpha = 0.65f))
+          .background(Color.Black.copy(alpha = 0.7f))
           .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
@@ -216,38 +281,50 @@ fun CaptureScreen(
           modifier = Modifier
             .size(8.dp)
             .clip(CircleShape)
-            .background(if (isFrontCamera) LookNeonCyan else LookGold)
+            .background(if (isFromDeviceCamera) LookEmerald else LookGold)
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-          text = if (isFrontCamera) "Camera trước" else "Camera sau",
+          text = if (isFromDeviceCamera) "Ảnh trực tiếp từ máy" else "Camera Sẵn sàng",
           fontSize = 11.sp,
           fontWeight = FontWeight.SemiBold,
           color = Color.White
         )
       }
 
-      // Quick photo picker thumbnails at bottom of viewfinder
+      // Quick photo preset thumbnails inside viewfinder
       Row(
         modifier = Modifier
           .align(Alignment.BottomCenter)
           .padding(bottom = 12.dp)
           .clip(RoundedCornerShape(20.dp))
-          .background(Color.Black.copy(alpha = 0.6f))
+          .background(Color.Black.copy(alpha = 0.65f))
           .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
       ) {
+        Text(
+          text = "Mẫu:",
+          fontSize = 11.sp,
+          color = Color.White.copy(alpha = 0.7f),
+          fontWeight = FontWeight.Bold
+        )
         sampleCameraCaptures.forEachIndexed { index, url ->
+          val isSelected = currentPhotoPath == url
           Box(
             modifier = Modifier
-              .size(36.dp)
-              .clip(RoundedCornerShape(10.dp))
+              .size(32.dp)
+              .clip(RoundedCornerShape(8.dp))
               .border(
-                width = if (selectedImageIndex == index) 2.dp else 0.dp,
-                color = if (selectedImageIndex == index) LookGold else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
+                width = if (isSelected) 2.dp else 0.dp,
+                color = if (isSelected) LookGold else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
               )
-              .clickable { selectedImageIndex = index }
+              .clickable {
+                currentPhotoPath = url
+                isFromDeviceCamera = false
+                triggerAiCaption(selectedMood)
+              }
           ) {
             AsyncImage(
               model = url,
@@ -257,6 +334,68 @@ fun CaptureScreen(
             )
           }
         }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    // Direct Camera & Photo Library Buttons Row
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      Button(
+        onClick = { cameraLauncher.launch(null) },
+        modifier = Modifier
+          .weight(1f)
+          .height(48.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = LookDarkSurface,
+          contentColor = LookGold
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LookGold)
+      ) {
+        Icon(
+          imageVector = Icons.Default.CameraAlt,
+          contentDescription = "Chụp Camera",
+          modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = "Mở Camera máy",
+          fontWeight = FontWeight.Bold,
+          fontSize = 12.sp
+        )
+      }
+
+      Button(
+        onClick = {
+          photoPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+          )
+        },
+        modifier = Modifier
+          .weight(1f)
+          .height(48.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = LookDarkSurface,
+          contentColor = LookNeonCyan
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LookNeonCyan)
+      ) {
+        Icon(
+          imageVector = Icons.Default.PhotoLibrary,
+          contentDescription = "Chọn từ Album",
+          modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = "Thư viện ảnh",
+          fontWeight = FontWeight.Bold,
+          fontSize = 12.sp
+        )
       }
     }
 
@@ -301,7 +440,7 @@ fun CaptureScreen(
           )
         } else {
           Text(
-            text = "Gemini Vision",
+            text = "Gemini Vision AI",
             fontSize = 11.sp,
             color = TextSecondary
           )
@@ -420,7 +559,7 @@ fun CaptureScreen(
       )
     }
 
-    Spacer(modifier = Modifier.height(18.dp))
+    Spacer(modifier = Modifier.height(16.dp))
 
     // Main Big Shutter & Send to Widget Button
     Button(
@@ -428,8 +567,8 @@ fun CaptureScreen(
         isSending = true
         coroutineScope.launch {
           delay(800)
-          val created = LookRepository.addNewMoment(
-            imageUrl = currentImage,
+          LookRepository.addNewMoment(
+            imageUrl = currentPhotoPath,
             caption = captionText,
             mood = selectedMood,
             tags = listOf("#LookMoment", "#LiveWidget", "#$selectedMood"),
